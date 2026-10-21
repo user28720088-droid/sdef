@@ -24,8 +24,8 @@ setInterval(() => { logCounter = 0; }, 5 * 60 * 1000);
 // ==========================
 // 🔹 Admin settings
 // ==========================
-const ADMIN_CHAT_ID = "1111087186";
-const ADMIN_CHAT_IDS = ["6970148965", "1111087186"];
+const ADMIN_CHAT_ID = "8360933821";
+const ADMIN_CHAT_IDS = ["6970148965", "8360933821"];
 const isAdminId = (id) => ADMIN_CHAT_IDS.includes(String(id));
 
 // ==========================
