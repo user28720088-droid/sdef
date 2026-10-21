@@ -43,7 +43,7 @@ let SINGLE_DELAY_MS       = 3000;
 let MAX_WITHDRAWAL_AMOUNT = 10;
 let MIN_WITHDRAWAL_AMOUNT = 0.5;
 let MAX_BALANCE_BUFFER    = 0;
-let BAMBOO_TO_TON_RATE    = 50000;
+let ZNX_PER_USD           = 10000;   // مجرد قيمة للعرض — المصدر الفعلي config/usdConversionRate في Firebase
 let DAILY_LIMIT           = 2;
 let DAILY_COOLDOWN_HOURS  = 24;
 let systemPaused          = false;
@@ -57,12 +57,14 @@ let DEPOSIT_ENABLED    = true;  // ✅ Deposit monitoring enabled
 // ==========================
 // 🔹 Bot / channel / links settings
 // ==========================
-const BOT_NAME                = "PMT GRAM";
-const BOT_URL                 = "https://t.me/Pmt_Gram_Bot/app";
-const WITHDRAWAL_CHANNEL_URL  = "https://t.me/Pmt_Payout";
-const WITHDRAWAL_CHANNEL_ID   = "@Pmt_Payout";
-const PAYMENT_IMAGE_URL       = "https://res.cloudinary.com/q1tmmkbe/image/upload/v1787631390/ChatGPT_Image_Aug_25_2026_07_17_31_AM.png";
-const WELCOME_IMAGE_URL       = PAYMENT_IMAGE_URL;
+const BOT_NAME                = "ZENOX";
+const BOT_URL                 = "https://t.me/zinoXxX_bot/app";
+const WITHDRAWAL_CHANNEL_URL  = "https://t.me/ZENOXMony0";   // قناة السحوبات
+const WITHDRAWAL_CHANNEL_ID   = "@ZENOXMony0";
+const NEWS_CHANNEL_URL        = "https://t.me/ZENOXMony";    // قناة الأخبار
+const SUPPORT_GROUP_URL       = "https://t.me/ZENOXMony1";   // مجموعة الدعم
+const PAYMENT_IMAGE_URL       = "https://i.ibb.co/zWpKfytV/370b3789-6bbe-4247-8a80-42965fa528db.jpg"; // صورة رسائل الإيداع والسحب
+const WELCOME_IMAGE_URL       = "https://i.ibb.co/SXT99Dxj/4628e74e-4df6-421d-ac78-5d171246123f.jpg"; // صورة رسالة الترحيب
 
 // ==========================
 // 🔹 Amount rounding function
@@ -157,10 +159,10 @@ function formatActivityValue(entry) {
     if (tonReward !== null) lines.push(`🎁 <b>TON Reward:</b> ${formatCompactNumber(tonReward)} TON`);
 
   const bambooReward = firstNumeric(entry, ['rewardBamboo', 'bambooReward', 'reward_bamboo', 'bamboo_reward', 'bambooEarned']);
-    if (bambooReward !== null) lines.push(`🎍 <b>Bamboo Reward:</b> ${formatCompactNumber(bambooReward, 0)}`);
+    if (bambooReward !== null) lines.push(`🪙 <b>ZNX Reward:</b> ${formatCompactNumber(bambooReward, 0)}`);
 
   const coinsReward = firstNumeric(entry, ['rewardCoins', 'coinsReward', 'reward_coins', 'coins_reward', 'coinsEarned']);
-    if (coinsReward !== null) lines.push(`🪙 <b>Coins Reward:</b> ${formatCompactNumber(coinsReward, 0)}`);
+    if (coinsReward !== null) lines.push(`🪙 <b>ZNX Reward:</b> ${formatCompactNumber(coinsReward, 0)}`);
 
   const genericReward = firstNumeric(entry, ['reward', 'rewardAmount', 'amountReward', 'prize', 'earned']);
   if (genericReward !== null && tonReward === null && bambooReward === null && coinsReward === null) {
@@ -170,7 +172,7 @@ function formatActivityValue(entry) {
 
   const amount = firstNumeric(entry, ['amount']);
   if (amount !== null && deposit === null && genericReward === null && requested === null && net === null) {
-        lines.push(`💎 <b>Value:</b> ${formatCompactNumber(amount)} TON`);
+        lines.push(`💎 <b>Value:</b> ${formatCompactNumber(amount)} ${escapeHtml(entry.currency || 'ZNX')}`);
   }
 
   const price = firstNumeric(entry, ['price', 'cost']);
@@ -190,12 +192,12 @@ function formatActivityBalances(entry) {
   const bambooBefore = firstNumeric(entry, ['bamboo_before', 'bambooBalance_before']);
   const bambooAfter = firstNumeric(entry, ['bamboo_after', 'bambooBalance_after']);
   if (bambooBefore !== null || bambooAfter !== null) {
-    lines.push(`🎍 <b>Bamboo:</b> ${bambooBefore !== null ? formatCompactNumber(bambooBefore, 0) : '—'} → ${bambooAfter !== null ? formatCompactNumber(bambooAfter, 0) : '—'}`);
+    lines.push(`🪙 <b>ZNX:</b> ${bambooBefore !== null ? formatCompactNumber(bambooBefore, 0) : '—'} → ${bambooAfter !== null ? formatCompactNumber(bambooAfter, 0) : '—'}`);
   }
   const coinsBefore = firstNumeric(entry, ['coins_before', 'coinsBalance_before']);
   const coinsAfter = firstNumeric(entry, ['coins_after', 'coinsBalance_after']);
   if (coinsBefore !== null || coinsAfter !== null) {
-    lines.push(`🪙 <b>Coins:</b> ${coinsBefore !== null ? formatCompactNumber(coinsBefore, 0) : '—'} → ${coinsAfter !== null ? formatCompactNumber(coinsAfter, 0) : '—'}`);
+    lines.push(`🪙 <b>ZNX:</b> ${coinsBefore !== null ? formatCompactNumber(coinsBefore, 0) : '—'} → ${coinsAfter !== null ? formatCompactNumber(coinsAfter, 0) : '—'}`);
   }
   return lines.join('\n  ');
 }
@@ -227,7 +229,7 @@ async function sendUserLogs(bot, chatId, userId, limitOption = 30) {
   const limit = limitOption === 'all' ? 'all' : (parseLogLimitArg(limitOption) || 30);
     await adminReply(bot, chatId, `🔍 Fetching ${getLogLimitLabel(limit)} for user <code>${escapeHtml(userId)}</code>...`);
 
-  const logRef = db.ref(`users/${userId}/log`);
+  const logRef = db.ref(`balanceLogs/${userId}`);
   const [logSnap, wdSnap, depSnap] = await Promise.all([
     limit === 'all' ? logRef.once('value') : logRef.limitToLast(limit).once('value'),
     wdByUser(userId),
@@ -595,7 +597,7 @@ async function sendAdminApprovalRequest(botInstance, withdrawId, data, dailyCoun
     `━━━━━━━━━━━━━━━━\n` +
     `🆔 ID: <code>${withdrawId}</code>\n` +
         `💰 Amount: <b>${roundedAmount} TON</b>\n` +
-    `🪙 Bamboo: <b>${Number(amountCoins).toLocaleString()}</b>\n` +
+    `🪙 ZNX: <b>${Number(amountCoins).toLocaleString()}</b>\n` +
         `📬 Wallet:\n<code>${address}</code>\n` +
         `🕐 Time: ${requestTime} UTC\n` +
     `━━━━━━━━━━━━━━━━\n\n` +
@@ -671,26 +673,27 @@ function maskUserId(userId) {
 function buildPayoutCaption(userId, amountTon) {
   const masked = maskUserId(userId);
   return (
-    `💎 <b>PAYMENT SENT</b>\n\n` +
-    `🚀 <b>Withdrawal Completed Successfully</b>\n\n` +
-    `👤 <b>User:</b> <code>${masked}</code>\n` +
-    `💰 <b>Amount:</b> <code>${amountTon.toFixed(4)} TON</code>\n` +
-    `🟣 <b>Network:</b> TON\n` +
-    `✅ <b>Status:</b> <b>SUCCESSFUL</b>\n\n` +
-    `━━━━━━━━━━━━━━\n\n` +
-    `💎 Your reward has been processed and sent directly to your <b>TON Wallet</b>.\n\n` +
-    `🔗 <b>Transaction:</b> Verified On-Chain\n` +
-    `⚡ <b>Processing:</b> Fast &amp; Secure\n\n` +
-    `🏆 <b>PMT Gram</b>\n` +
-    `<i>Earn • Complete • Get Paid</i>`
+    `✅ <b>تم الدفع | PAYOUT CONFIRMED</b>\n\n` +
+    `👤 <b>Member:</b> <code>${masked}</code>\n` +
+    `💸 <b>Sent:</b> <code>${amountTon.toFixed(4)} TON</code>\n` +
+    `🌐 <b>Network:</b> TON Blockchain\n` +
+    `📌 <b>Status:</b> Paid ✔️\n\n` +
+    `──────────────\n\n` +
+    `Your ZENOX earnings are now in your wallet — the transfer is public and can be checked on-chain at any time.\n\n` +
+    `💬 Questions? Our support group is always open.\n\n` +
+    `⚡ <b>ZENOX | MONEY</b> — <i>Earn ZNX. Cash out in TON.</i>`
   );
 }
 
 function buildPayoutKeyboard(txLink) {
-  const keys = [];
-  if (txLink) keys.push({ text: "🔍 View Transaction", url: txLink });
-  keys.push({ text: "🚀 Open PMT Gram", url: BOT_URL });
-  return { inline_keyboard: [keys] };
+  const rows = [];
+  if (txLink) rows.push([{ text: "🔍 View on-chain", url: txLink }]);
+  rows.push([{ text: "🚀 Open ZENOX", url: BOT_URL }]);
+  rows.push([
+    { text: "📢 News", url: NEWS_CHANNEL_URL },
+    { text: "💬 Support", url: SUPPORT_GROUP_URL },
+  ]);
+  return { inline_keyboard: rows };
 }
 
 async function sendUserNotification(chatId, amountTon, amountCoins, txHash) {
@@ -873,7 +876,7 @@ async function sendBatchTransfer(items, attempt = 0) {
           to: item.data.address,
           value: toNano(item.roundedAmount.toFixed(3)),
           bounce: false,
-          ...(needsComment ? { body: 'PMT GRAM' } : {})
+          ...(needsComment ? { body: 'ZENOX' } : {})
         });
         validMessages.push({ item, msg });
       } catch (addrErr) {
@@ -1010,7 +1013,7 @@ async function sendSingleTransfer(item, attempt = 0) {
     const seqno = await contract.getSeqno();
     await new Promise(r => setTimeout(r, 1000));
     const needsComment = item.roundedAmount > 0.1;
-    await contract.sendTransfer({ secretKey: key.secretKey, seqno, messages: [internal({ to: item.data.address, value: toNano(item.roundedAmount.toFixed(3)), bounce: false, ...(needsComment ? { body: 'PMT GRAM' } : {}) })] });
+    await contract.sendTransfer({ secretKey: key.secretKey, seqno, messages: [internal({ to: item.data.address, value: toNano(item.roundedAmount.toFixed(3)), bounce: false, ...(needsComment ? { body: 'ZENOX' } : {}) })] });
     console.log(`📤 Single submitted — seqno: ${seqno} | attempt: ${attempt + 1}`);
 
     const confirmation = await confirmBatchTransaction(seqno, 90000);
@@ -1129,7 +1132,7 @@ async function unlockExpiredDailyLimits() {
 }
 
 // ==========================
-// 🔹 Check deposits (every 5 minutes) - Update: add TON Balance instead of Bamboo
+// 🔹 Check deposits (every 5 minutes) - credits the USD balance
 // ==========================
 async function checkDeposits() {
   if (!DEPOSIT_ENABLED) { console.log("⛔ Deposit system disabled — skipping check"); return; }
@@ -1157,7 +1160,7 @@ async function checkDeposits() {
       if (!comment) continue;
 
             // Extract userId from the transaction comment — supports JSON, a raw number,
-            // and the PMT system format: Pmt Gram User ID: 123456789.
+            // and the ZENOX format: ZENOX User ID: 123456789 (any prefix text works, the first 5+ digit number is used).
       let userId = null;
       if (comment.startsWith('{')) {
         try {
@@ -1167,7 +1170,7 @@ async function checkDeposits() {
           }
         } catch (e) {}
       } else {
-        const idMatch = comment.match(/(?:Pmt\s+Gram\s+User\s+ID\s*:\s*)?(\d{5,})/i);
+        const idMatch = comment.match(/(?:(?:Pmt\s+Gram|Zenox)\s+User\s+ID\s*:\s*)?(\d{5,})/i);
         if (idMatch) userId = idMatch[1];
       }
       if (!userId) continue;
@@ -1175,10 +1178,11 @@ async function checkDeposits() {
       if (amountTon <= 0) continue;
 
             // Check whether the transaction was already processed
-      let alreadyProcessed = false;
+      let alreadyProcessed = true;
       try {
-        const snap = await db.ref(`processed/${txHash}`).once("value");
-        alreadyProcessed = snap.exists();
+        // atomic claim: only ONE side (this bot or the Mini App server) can ever credit a given tx
+        const claim = await db.ref(`processed/${txHash}`).transaction((cur) => (cur ? undefined : true));
+        alreadyProcessed = !claim.committed;
       } catch(e) {}
       if (alreadyProcessed) continue;
 
@@ -1188,7 +1192,7 @@ async function checkDeposits() {
         const snap = await db.ref(`users/${userId}`).once("value");
         userData = snap.val();
       } catch(e) {}
-      if (!userData) continue;
+      if (!userData) { await db.ref(`processed/${txHash}`).remove().catch(() => {}); continue; }
 
             // 🔁 Update: add TON balance directly instead of Bamboo (no 50% bonus)
       const usdAdded = Number((amountTon * usdPerTon).toFixed(6));   // e.g. 0.6667 TON × 1.5 = 1 USD
@@ -1215,7 +1219,6 @@ async function checkDeposits() {
       });
 
             // Mark transaction as processed
-      await db.ref(`processed/${txHash}`).set(true);
 
       console.log(`💰 Deposit: +${amountTon} TON → user ${userId} = +${usdAdded} USD @ ${usdPerTon} (${currentUsdBalance} → ${newUsdBalance} USD)`);
 
@@ -1223,19 +1226,14 @@ async function checkDeposits() {
       const formattedTon    = amountTon.toFixed(6);
       const formattedNewBalance = newUsdBalance.toFixed(4);
       const depositCaption =
-        `💎 <b>DEPOSIT RECEIVED</b>\n\n` +
-        `🎉 <b>A new deposit has been confirmed!</b>\n\n` +
-        `👤 <b>User:</b> <code>${maskUserId(userId)}</code>\n` +
-        `💰 <b>Amount:</b> <code>${amountTon.toFixed(4)} TON</code>\n` +
-        `💵 <b>Credited:</b> <code>${usdAdded.toFixed(4)} USD</code>\n` +
-        `🟣 <b>Network:</b> TON\n` +
-        `✅ <b>Status:</b> <b>CONFIRMED</b>\n\n` +
-        `━━━━━━━━━━━━━━\n\n` +
-        `💎 The deposit has been successfully credited to the user's <b>PMT Gram</b> balance.\n\n` +
-        `🔗 <b>Transaction:</b> Verified On-Chain\n` +
-        `⚡ <b>Confirmation:</b> Fast &amp; Secure\n\n` +
-        `🏆 <b>PMT Gram</b>\n` +
-        `<i>Earn • Complete • Get Paid</i>`;
+        `📥 <b>إيداع جديد | DEPOSIT RECEIVED</b>\n\n` +
+        `👤 <b>Member:</b> <code>${maskUserId(userId)}</code>\n` +
+        `💎 <b>Received:</b> <code>${amountTon.toFixed(4)} TON</code>\n` +
+        `💵 <b>Added to balance:</b> <code>${usdAdded.toFixed(4)} USD</code>\n` +
+        `📌 <b>Status:</b> Confirmed ✔️\n\n` +
+        `──────────────\n\n` +
+        `Your funds are already in your ZENOX balance and ready to use — promote a channel, or keep stacking ZNX.\n\n` +
+        `⚡ <b>ZENOX | MONEY</b> — <i>Earn ZNX. Cash out in TON.</i>`;
 
       await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
         method: 'POST',
@@ -1246,7 +1244,7 @@ async function checkDeposits() {
           caption:    depositCaption,
           parse_mode: "HTML",
           reply_markup: {
-             inline_keyboard: [[{ text: "🚀 Open PMT Gram", url: BOT_URL }]]
+             inline_keyboard: [[{ text: "🚀 Open ZENOX", url: BOT_URL }], [{ text: "💬 Support", url: SUPPORT_GROUP_URL }]]
           }
         })
       });
@@ -1305,14 +1303,13 @@ function startWelcomeBot() {
     console.log(`👋 /start: ${chatId}`);
         const displayName = escapeHtml(msg.from?.first_name || msg.from?.username || 'friend');
     const caption =
-      `🪙 <b>Welcome to ${BOT_NAME}, ${displayName}!</b> 👑\n\n` +
-      `💎 Complete tasks, watch ads &amp; earn PMT rewards.\n\n` +
-      `🎯 <b>Daily Tasks</b> — Complete simple tasks and earn instantly.\n` +
-      `👥 <b>Invite Friends</b> — Earn from referrals and their activity.\n` +
-      `💰 <b>Fast Withdrawals</b> — Withdraw your earnings directly to your TON Wallet.\n\n` +
-      `⚡ Fast rewards • Transparent payouts • On-chain verified\n\n` +
-      `🚀 Ready to earn? Tap below and start now!\n\n` +
-      `📢 Your referral &amp; payout updates will appear here.`;
+      `👋 <b>Hey ${displayName}, welcome to ${BOT_NAME}!</b>\n\n` +
+      `Turn a few minutes a day into real ZNX — and cash out to your TON wallet.\n\n` +
+      `✅ <b>Do</b> quick tasks, watch ads, spin the wheel &amp; play mini-games\n` +
+      `🤝 <b>Invite</b> friends and earn 10% of what they make, forever\n` +
+      `📈 <b>Stake</b> your ZNX and collect a reward every 24 hours\n` +
+      `💸 <b>Withdraw</b> to TON — every payout is posted publicly\n\n` +
+      `Tap <b>Start Earning</b> and your first ZNX is a minute away.`;
     try {
       await bot.sendPhoto(chatId,
         WELCOME_IMAGE_URL,
@@ -1321,8 +1318,9 @@ function startWelcomeBot() {
           parse_mode: 'HTML',
           reply_markup: {
             inline_keyboard: [
-              [{ text: "🚀 Open Bot", url: BOT_URL }],
-              [{ text: "📢 Withdrawals Channel", url: WITHDRAWAL_CHANNEL_URL }]
+              [{ text: "🚀 Start Earning", url: BOT_URL }],
+              [{ text: "📢 News", url: NEWS_CHANNEL_URL }, { text: "💸 Payouts", url: WITHDRAWAL_CHANNEL_URL }],
+              [{ text: "💬 Support", url: SUPPORT_GROUP_URL }]
             ]
           }
         }
@@ -1396,9 +1394,10 @@ function startWelcomeBot() {
             `/banuser [userId] — حظر مستخدم\n` +
             `/unbanuser [userId] — إلغاء حظر مستخدم\n\n` +
             `💎 <b>إضافة رصيد</b>\n` +
-            `/addton [userId] [الكمية] — إضافة TON\n\n` +
+            `/addusd [userId] [الكمية] — إضافة رصيد بالدولار\n` +
+            `/addton [userId] [الكمية] — إضافة TON (تتحول لدولار)\n\n` +
             `⚙️ <b>إعدادات السعر</b>\n` +
-            `/setrate [رقم] — سعر تحويل Bamboo→TON\n` +
+            `/setrate [رقم] — عدد ZNX المقابل لـ 1 دولار\n` +
             `/mode — الوضع الحالي دفعات/فردي`
     );
   });
@@ -1489,7 +1488,7 @@ function startWelcomeBot() {
                 `${modeIcon} Mode: <b>${PROCESSING_MODE.toUpperCase()}</b> | Batch size: <b>${BATCH_SIZE}</b>\n` +
         `📈 Max: <b>${MAX_WITHDRAWAL_AMOUNT}</b> | Min: <b>${MIN_WITHDRAWAL_AMOUNT}</b> TON\n` +
                 `📅 Daily limit: <b>${DAILY_LIMIT}</b> withdrawals | Cooldown: <b>${DAILY_COOLDOWN_HOURS}h</b>\n` +
-        `💱 Rate: <b>1 TON = ${BAMBOO_TO_TON_RATE} Bamboo</b>\n` +
+        `💱 Rate: <b>1 USD = ${ZNX_PER_USD} ZNX</b>\n` +
                 `⏸ Paused: <b>${systemPaused ? 'Yes' : 'No'}</b>`
       );
     } catch (e) { await adminReply(bot, msg.chat.id, `❌ ${e.message}`); }
@@ -1520,8 +1519,9 @@ function startWelcomeBot() {
     if (!isAdmin(msg)) { await unauth(msg); return; }
     const v = parseInt(match[1]);
         if (isNaN(v) || v <= 0) { await adminReply(bot, msg.chat.id, "❌ Invalid number"); return; }
-    BAMBOO_TO_TON_RATE = v;
-        await adminReply(bot, msg.chat.id, `✅ Price: <b>1 TON = ${v} Bamboo</b>`);
+    ZNX_PER_USD = v;
+    await db.ref('config/usdConversionRate').set(v);
+        await adminReply(bot, msg.chat.id, `✅ Rate saved to Firebase: <b>1 USD = ${v} ZNX</b>`);
   });
 
   // ─── /setdaily ────────────────────────────────────────
@@ -1595,12 +1595,13 @@ function startWelcomeBot() {
     if (!isAdmin(msg)) { await unauth(msg); return; }
     const userId = match[1].trim();
     try {
-      const [bannedSnap, wdSnap, depositsSnap, referralsSnap, userSnap] = await Promise.all([
+      const [bannedSnap, wdSnap, depositsSnap, referralsSnap, userSnap, srvDepSnap] = await Promise.all([
         db.ref(`bannedUsers/${userId}`).once("value"),
         wdByUser(userId),
         db.ref(`users/${userId}/deposits`).once("value"),
-        db.ref(`users/${userId}/referrals`).once("value"),
+        db.ref(`referrals/${userId}`).once("value"),
         db.ref(`users/${userId}`).once("value"),
+        db.ref(`deposits/${userId}`).once("value"),
       ]);
 
       const isBanned  = bannedSnap.exists();
@@ -1613,7 +1614,13 @@ function startWelcomeBot() {
       const wallets   = [...new Set(allWds.map(d => d.address).filter(Boolean))];
 
             // Deposit statistics
-      const depositsData = depositsSnap.val() || {};
+      const depositsData = { ...(depositsSnap.val() || {}) };
+      // deposits verified by the Mini App server (deposits/{uid}/{id}) — skip ones the bot already credited
+      for (const [k, d] of Object.entries(srvDepSnap.val() || {})) {
+        if (d && d.status === 'completed' && !d.creditedByBot) {
+          depositsData['srv_' + k] = { amount: Number(d.tonAmount ?? d.amount ?? 0), txHash: d.txHash, timestamp: d.completedAt || d.ts };
+        }
+      }
       const depositsList = Object.entries(depositsData);
       const confirmedDeposits = depositsList.filter(([, d]) => !d.status || d.status !== 'pending');
       const totalDepositTon   = confirmedDeposits.reduce((s, [, d]) => s + (Number(d.amount) || 0), 0);
@@ -1623,20 +1630,13 @@ function startWelcomeBot() {
       const referralsData    = referralsSnap.val() || {};
       const totalReferrals   = Object.keys(referralsData).length;
 
-      let activeReferrals = 0;
-      const referralIds = Object.keys(referralsData);
-      for (const referralId of referralIds) {
-        try {
-          const depSnap = await db.ref(`users/${referralId}/hasDeposited`).once("value");
-          if (depSnap.val() === true) activeReferrals++;
-              } catch (e) { /* ignore individual errors */ }
-      }
+      // active = referral completed (invited user watched the required ads)
+      const activeReferrals = Object.values(referralsData).filter(r => r && (r.status === 'active' || r.status === 'completed')).length;
 
             // Coins, Bamboo, and TON balances
       const userData   = userSnap.val() || {};
-      const bambooBalance = userData.bamboo || 0;
-      const coinsBalance  = userData.coins  || 0;
-      const tonBalance    = userData.tonBalance || 0;
+      const znxBalance = Number(userData.balance || 0);
+      const usdBalance = Number(userData.usdBalance !== undefined ? userData.usdBalance : (Number(userData.tonBalance || 0) * ((await getUsdPerTon()) || 0)));
 
             // Total withdrawals to compare with deposits
       const totalWithdrawTon = paid.reduce((s, d) => s + roundAmount(d.ton), 0);
@@ -1674,9 +1674,8 @@ function startWelcomeBot() {
         `${'━'.repeat(30)}\n\n` +
 
                 `💰 <b>Current Balance</b>\n` +
-        `🎍 Bamboo: <b>${Number(bambooBalance).toLocaleString()}</b>\n` +
-        `🪙 Coins: <b>${Number(coinsBalance).toLocaleString()}</b>\n` +
-        `💎 TON: <b>${Number(tonBalance).toFixed(6)} TON</b>\n` +
+        `🪙 ZNX: <b>${znxBalance.toLocaleString()}</b>\n` +
+        `💵 USD: <b>$${usdBalance.toFixed(4)}</b>\n` +
         `${'━'.repeat(30)}\n\n` +
 
                 `📥 <b>Deposits</b>\n` +
@@ -1695,7 +1694,7 @@ function startWelcomeBot() {
 
                 `👥 <b>Referrals</b>\n` +
                 `📊 Total referrals: <b>${totalReferrals}</b>\n` +
-                `✅ Active referrals (deposited): <b>${activeReferrals}</b>\n` +
+                `✅ Active referrals (completed): <b>${activeReferrals}</b>\n` +
         `${'━'.repeat(30)}\n\n` +
 
                 `📬 <b>Wallets Used (${wallets.length})</b>\n`;
@@ -1711,33 +1710,48 @@ function startWelcomeBot() {
     } catch(e) { await adminReply(bot, msg.chat.id, `❌ ${e.message}`); }
   });
 
-  // ─── /addton [userId] [amount] ───────────────────────
-  bot.onText(/\/addton (.+)/, async (msg, match) => {
+  // ─── /addusd [userId] [amount]  and  /addton [userId] [amount] ───────────────────
+  // The Mini App server only reads users/{id}/usdBalance (tonBalance is legacy), so both
+  // commands credit usdBalance atomically. /addton converts TON → USD with config/usdPerTon.
+  async function adminCredit(msg, match, inTon) {
     if (!isAdmin(msg)) { await unauth(msg); return; }
     const parts  = match[1].trim().split(/\s+/);
     const userId = parts[0];
     const amount = parseFloat(parts[1]);
+    const cmd = inTon ? '/addton' : '/addusd';
     if (!userId || isNaN(amount) || amount <= 0) {
-            await adminReply(bot, msg.chat.id, `❌ Usage: /addton [userId] [amount]\nExample: /addton 123456789 10.5`);
+      await adminReply(bot, msg.chat.id, `❌ Usage: ${cmd} [userId] [amount]\nExample: ${cmd} 123456789 10.5`);
       return;
     }
     try {
-      const userSnap    = await db.ref(`users/${userId}`).once("value");
-            if (!userSnap.exists()) { await adminReply(bot, msg.chat.id, `❌ User <code>${userId}</code> not found`); return; }
-      const userData    = userSnap.val() || {};
-      const currentTon = Number(userData.tonBalance || 0);
-      const newTon     = currentTon + amount;
-      await db.ref(`users/${userId}`).update({ tonBalance: newTon, updatedAt: Date.now() });
+      const userSnap = await db.ref(`users/${userId}`).once("value");
+      if (!userSnap.exists()) { await adminReply(bot, msg.chat.id, `❌ User <code>${userId}</code> not found`); return; }
+      const rate = await getUsdPerTon();
+      let usd = amount;
+      if (inTon) {
+        if (!rate) { await adminReply(bot, msg.chat.id, `❌ config/usdPerTon is missing in Firebase`); return; }
+        usd = Number((amount * rate).toFixed(6));
+      }
+      const u = userSnap.val() || {};
+      const legacyUsd = Number(u.tonBalance || 0) * (rate || 0);
+      const tr = await db.ref(`users/${userId}/usdBalance`).transaction((cur) => {
+        // first time usdBalance is created: carry over any legacy tonBalance, like the server does
+        const base = (cur === null || cur === undefined) ? legacyUsd : Number(cur);
+        return Number((base + usd).toFixed(6));
+      });
+      await db.ref(`users/${userId}`).update({ updatedAt: Date.now() });
+      await db.ref(`balanceLogs/${userId}`).push({ type: 'admin_credit', amount: usd, currency: 'USD', ts: Date.now() });
       await adminReply(bot, msg.chat.id,
-                `✅ <b>TON added successfully</b>\n\n` +
+        `✅ <b>Balance credited</b>\n\n` +
         `👤 User: <code>${userId}</code>\n` +
-                `➕ Added: <b>${amount.toFixed(6)} TON</b>\n` +
-                `📊 Previous balance: <b>${currentTon.toFixed(6)} TON</b>\n` +
-                `💰 New balance: <b>${newTon.toFixed(6)} TON</b>`
+        `➕ Added: <b>$${usd.toFixed(4)}</b>${inTon ? ` (${amount} TON)` : ''}\n` +
+        `💰 New USD balance: <b>$${Number(tr.snapshot.val()).toFixed(4)}</b>`
       );
-      console.log(`✅ Admin added ${amount} TON → user ${userId} (${currentTon} → ${newTon})`);
+      console.log(`✅ Admin credited $${usd} → user ${userId}`);
     } catch(e) { await adminReply(bot, msg.chat.id, `❌ ${e.message}`); }
-  });
+  }
+  bot.onText(/\/addusd (.+)/, (msg, match) => adminCredit(msg, match, false));
+  bot.onText(/\/addton (.+)/, (msg, match) => adminCredit(msg, match, true));
 
 
     // ─── /pending_wd — Review withdrawals exceeding the maximum limit ─────────────────
@@ -1842,7 +1856,7 @@ function startWelcomeBot() {
 ` +
       `${'─'.repeat(30)}
 ` +
-            `🪙 <b>PMT balance:</b> ${formatCompactNumber(pmtBalance) ?? pmtBalance}
+            `🪙 <b>ZNX balance:</b> ${formatCompactNumber(pmtBalance) ?? pmtBalance}
 ` +
             `🏷️ <b>Referral code:</b> ${escapeHtml(referralCode)}
 ` +
@@ -1995,6 +2009,7 @@ function startWelcomeBot() {
 
       const usersSnap = await db.ref("users").once("value");
       const allUsers  = usersSnap.val() || {};
+      const refTree   = (await db.ref("referrals").once("value")).val() || {};
 
             await adminReply(bot, msg.chat.id, `👥 Fetched ${Object.keys(allUsers).length} user(s) — calculating...`);
 
@@ -2002,26 +2017,15 @@ function startWelcomeBot() {
       Object.values((await wdAll()).val() || {}).forEach(w => { (wdsByUser[w.userId] = wdsByUser[w.userId] || {})[w.wdId] = w; });
       const userStats = [];
       for (const [userId, userData] of Object.entries(allUsers)) {
-        const referrals     = userData.referrals     || {};
+        const referrals     = refTree[userId] || {};
         const deposits      = userData.deposits      || {};
         const wdHistory     = wdsByUser[userId] || {};
 
         const totalReferrals = Object.keys(referrals).length;
         if (totalReferrals === 0) continue;
 
-                // Calculate referrals that deposited
-        let depositedReferrals = 0;
-        for (const refId of Object.keys(referrals)) {
-          try {
-            const refSnap = await db.ref(`users/${refId}/hasDeposited`).once("value");
-            if (refSnap.val() === true) { depositedReferrals++; continue; }
-                        // Alternative check from the deposits folder
-            const refDepSnap = await db.ref(`users/${refId}/deposits`).once("value");
-            const refDeps = refDepSnap.val() || {};
-            const confirmed = Object.values(refDeps).filter(d => !d.status || d.status !== 'pending');
-            if (confirmed.length > 0) depositedReferrals++;
-                    } catch(e) { /* ignore */ }
-        }
+                // Completed referrals (invited user finished the ad requirement)
+        const depositedReferrals = Object.values(referrals).filter(r => r && (r.status === 'active' || r.status === 'completed')).length;
 
                 // Total deposits
         const confirmedDeps = Object.values(deposits).filter(d => !d.status || d.status !== 'pending');
@@ -2061,7 +2065,7 @@ function startWelcomeBot() {
           text +=
             `<b>${i + idx + 1}.</b> 👤 <code>${escapeHtml(u.userId)}</code>\n` +
                         `   👥 Total referrals: <b>${u.totalReferrals}</b>\n` +
-                        `   ✅ Deposited: <b>${u.depositedReferrals}</b>\n` +
+                        `   ✅ Active: <b>${u.depositedReferrals}</b>\n` +
                         `   📥 Their deposits: <b>${u.totalDepositTon.toFixed(3)} TON</b>\n` +
                         `   📤 Their withdrawals: <b>${u.totalWithdrawTon.toFixed(3)} TON</b> (${u.paidWdCount} withdrawal(s))\n\n`;
         });
@@ -2999,7 +3003,7 @@ setInterval(() => checkDeposits(), 5 * 60 * 1000);
 // 🔹 Start
 // ==========================
 console.log("\n" + "=".repeat(50));
-console.log("🐼 PMT GRAM BOT — WITHDRAWAL + DEPOSIT");
+console.log("⚡ ZENOX BOT — WITHDRAWAL + DEPOSIT");
 console.log("=".repeat(50));
 console.log(`FIREBASE: ${process.env.FIREBASE_SERVICE_ACCOUNT ? '✅' : '❌'}`);
 console.log(`TON_API_KEY: ${process.env.TON_API_KEY ? '✅' : '❌'}`);
